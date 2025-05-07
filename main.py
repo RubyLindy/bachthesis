@@ -9,6 +9,7 @@ import numpy as np
 import pyaudio
 import sounddevice as sd
 import soundfile as sf
+import keyboard
 from openai import OpenAI
 from libs.starttypes import text, number
 
@@ -44,9 +45,8 @@ def _listen(lenArg):
 		pass
 	print("Recording...")
 
-	start_time = time.time()
 	with sd.InputStream(samplerate=sample_rate, channels=channels, dtype=dtype, callback=callback):
-		while time.time() - start_time < max_rec_time and not keyboard.is_pressed('space'):
+		while not keyboard.is_pressed('space'):
 			pass
 
 	audio_data = np.concatenate(audio_buffer, axis=0)
@@ -64,8 +64,21 @@ def _prompt(s1):
 	completion = client.chat.completions.create(
 		model="gpt-4o-mini",
 		messages=[
-			{"role": "user", "content": s1.value}
-		]
+            {
+					"role": "system", 
+					"content": (
+						"You are a robot that assists players with solving sudoku's."
+						"Always speak in plain English, no more than a 100 words per response."
+						"Avoid lists, code, or technical formatting."
+						"Speak naturally as if talking to a human."
+					)
+				},
+					
+			{
+                "role": "user",
+                "content": s1.value
+            }
+        ]
 	)
 	return text(value=completion.choices[0].message.content)
 
@@ -73,16 +86,23 @@ def _prompt(s1):
 
 @inlineCallbacks
 def main(session, details):
-	user_input = _listen(number(5))
-	print("User said:", user_input.value)
+	print("Press 'q' at any time to quit.")
 
-	reply = _prompt(user_input)
-	print("GPT-4o mini reply:", reply.value)
+	while not keyboard.is_pressed('q'):
+		try:
+			user_input = _listen(number(5))
+			print("User said:", user_input.value)
 
-	yield session.call("rie.dialogue.say", text=reply.value)
-	yield sleep(2)
-	yield session.call("rom.optional.behavior.play", name="BlocklyWaveRightArm")
+			reply = _prompt(user_input)
+			print("GPT-4o mini reply:", reply.value)
 
+			yield session.call("rie.dialogue.say", text=reply.value)
+			yield session.call("rom.optional.behavior.play", name="BlocklyWaveRightArm")
+
+		except Exception as e:
+			print("Error during interaction:", e)
+	
+	print("Quitting interaction loop...")
 	session.leave()
 
 wamp = Component(
