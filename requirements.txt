@@ -1,7 +1,10 @@
-numpy
 openai
-pyaudio
-keyboard
 sounddevice
 soundfile
+pyaudio
+numpy
+keyboard
+autobahn
+twisted
+msgpack
 tkinter
