@@ -4,3 +4,4 @@ pyaudio
 keyboard
 sounddevice
 soundfile
+tkinter
