@@ -67,10 +67,10 @@ def _prompt(s1):
             {
 					"role": "system", 
 					"content": (
-						"You are a robot that assists players with solving sudoku's."
+						"You are a robot that assists players with solving sudoku's. You cannot help with anything else."
 						"Always speak in plain English, no more than a 100 words per response."
 						"Avoid lists, code, or technical formatting."
-						"Speak naturally as if talking to a human."
+						"Speak naturally as if talking to a human and always stay on the topic of sudoku's."
 					)
 				},
 					
@@ -87,7 +87,8 @@ def _prompt(s1):
 @inlineCallbacks
 def main(session, details):
 	print("Press 'q' at any time to quit.")
-
+	yield session.call("rom.optional.behavior.play", name="BlocklyStand")
+	
 	while not keyboard.is_pressed('q'):
 		try:
 			user_input = _listen(number(5))
@@ -96,12 +97,12 @@ def main(session, details):
 			reply = _prompt(user_input)
 			print("GPT-4o mini reply:", reply.value)
 
-			yield session.call("rie.dialogue.say", text=reply.value)
-			yield session.call("rom.optional.behavior.play", name="BlocklyWaveRightArm")
+			yield session.call("rie.dialogue.say_animated", text=reply.value)
 
 		except Exception as e:
 			print("Error during interaction:", e)
 	
+	yield session.call("rom.optional.behavior.play", name="BlocklyCrouch")
 	print("Quitting interaction loop...")
 	session.leave()
 
@@ -111,7 +112,7 @@ wamp = Component(
 		"serializers": ["msgpack"],
 		"max_retries": 0
 	}],
-	realm="rie.681b0af3bab2120e3ffc563f",
+	realm="rie.681c6751bab2120e3ffc5ced",
 )
 
 wamp.on_join(main)
