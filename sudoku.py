@@ -1,8 +1,11 @@
 import tkinter as tk
 from tkinter import messagebox
+from sudoku_context import set_context
+from copy import deepcopy
+
 
 class SudokuUI:
-    def __init__(self, root, puzzle_file="puzzle.txt"):
+    def __init__(self, root, puzzle_file="puzzle2.txt"):
         self.root = root
         self.root.title("Sudoku")
 
@@ -11,7 +14,10 @@ class SudokuUI:
         self.create_grid()
 
         check_button = tk.Button(self.root, text="Check Validity", command=self.check_valid)
-        check_button.pack(pady=10)
+        check_button.pack(pady=5)
+
+        hint_button = tk.Button(self.root, text="Get Hint", command=self.show_hint)
+        hint_button.pack(pady=5)
 
     def load_puzzle(self, filename):
         with open(filename, "r") as f:
@@ -96,7 +102,68 @@ class SudokuUI:
 
         return True
 
+    def get_sudoku_context(self):
+        board = self.get_board()
+        context = "Current Sudoku board:\n"
+        for row in board:
+            context += " ".join(str(num) if num != 0 else "_" for num in row) + "\n"
+        return context
+
+    def update_context(self):
+        ctx = self.get_sudoku_context()
+        set_context(ctx)
+
+    # --------- Solver Logic Below ----------
+
+    def is_valid(self, board, row, col, num):
+        for i in range(9):
+            if board[row][i] == num or board[i][col] == num:
+                return False
+        start_row, start_col = 3 * (row // 3), 3 * (col // 3)
+        for i in range(3):
+            for j in range(3):
+                if board[start_row + i][start_col + j] == num:
+                    return False
+        return True
+
+    def solve_sudoku(self, board):
+        for row in range(9):
+            for col in range(9):
+                if board[row][col] == 0:
+                    for num in range(1, 10):
+                        if self.is_valid(board, row, col, num):
+                            board[row][col] = num
+                            if self.solve_sudoku(board):
+                                return True
+                            board[row][col] = 0
+                    return False
+        return True
+
+    def get_next_correct_move(self):
+        current_board = self.get_board()
+        solved = deepcopy(current_board)
+        if not self.solve_sudoku(solved):
+            return None  # unsolvable
+
+        for i in range(9):
+            for j in range(9):
+                if current_board[i][j] == 0:
+                    return (i, j, solved[i][j])  # row, col, correct value
+        return None
+
+    def show_hint(self):
+        hint = self.get_next_correct_move()
+        if hint:
+            i, j, val = hint
+            entry = self.entries[i][j]
+            entry.delete(0, tk.END)
+            entry.insert(0, str(val))
+            entry.config(fg="blue")  # visually distinguish hint
+        else:
+            messagebox.showinfo("Hint", "No hints available. Puzzle may be complete or unsolvable.")
+
+
 if __name__ == "__main__":
     root = tk.Tk()
-    app = SudokuUI(root, puzzle_file="puzzle.txt")
+    app = SudokuUI(root, puzzle_file="puzzle2.txt")
     root.mainloop()

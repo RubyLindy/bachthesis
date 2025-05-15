@@ -12,6 +12,7 @@ import soundfile as sf
 import keyboard
 from openai import OpenAI
 from libs.starttypes import text, number
+from sudoku_context import get_context
 
 LLMClient = False
 sample_rate = 22050
@@ -88,20 +89,23 @@ def _prompt(s1):
 def main(session, details):
 	print("Press 'q' at any time to quit.")
 	yield session.call("rom.optional.behavior.play", name="BlocklyStand")
-	
+
 	while not keyboard.is_pressed('q'):
 		try:
 			user_input = _listen(number(5))
 			print("User said:", user_input.value)
 
-			reply = _prompt(user_input)
+			sudoku_context = get_context()
+			combined_prompt = sudoku_context + "\nUser said:\n" + user_input.value
+
+			reply = _prompt(text(combined_prompt))
 			print("GPT-4o mini reply:", reply.value)
 
 			yield session.call("rie.dialogue.say_animated", text=reply.value)
 
 		except Exception as e:
 			print("Error during interaction:", e)
-	
+
 	yield session.call("rom.optional.behavior.play", name="BlocklyCrouch")
 	print("Quitting interaction loop...")
 	session.leave()
@@ -112,7 +116,7 @@ wamp = Component(
 		"serializers": ["msgpack"],
 		"max_retries": 0
 	}],
-	realm="rie.681c6751bab2120e3ffc5ced",
+	realm="rie.6825adf544932a6a6ce01f5b",
 )
 
 wamp.on_join(main)
