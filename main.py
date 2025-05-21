@@ -10,6 +10,7 @@ import pyaudio
 import sounddevice as sd
 import soundfile as sf
 import keyboard
+import daisys
 from openai import OpenAI
 from libs.starttypes import text, number
 from sudoku_context import get_context
