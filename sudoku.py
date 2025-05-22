@@ -1,7 +1,43 @@
 import tkinter as tk
 from tkinter import messagebox
-from sudoku_context import set_context
+from sudoku_context import set_context, set_hint
 from copy import deepcopy
+
+
+def get_next_correct_move_from_board(board):
+    def is_valid(board, row, col, num):
+        for i in range(9):
+            if board[row][i] == num or board[i][col] == num:
+                return False
+        start_row, start_col = 3 * (row // 3), 3 * (col // 3)
+        for i in range(3):
+            for j in range(3):
+                if board[start_row + i][start_col + j] == num:
+                    return False
+        return True
+
+    def solve(board):
+        for row in range(9):
+            for col in range(9):
+                if board[row][col] == 0:
+                    for num in range(1, 10):
+                        if is_valid(board, row, col, num):
+                            board[row][col] = num
+                            if solve(board):
+                                return True
+                            board[row][col] = 0
+                    return False
+        return True
+
+    solved = deepcopy(board)
+    if not solve(solved):
+        return None
+
+    for i in range(9):
+        for j in range(9):
+            if board[i][j] == 0:
+                return (i, j, solved[i][j])
+    return None
 
 
 class SudokuUI:
@@ -49,7 +85,6 @@ class SudokuUI:
             for j in range(9):
                 block_row, block_col = i // 3, j // 3
                 val = self.puzzle[i][j]
-                state = 'normal' if val == 0 else 'disabled'
                 entry = tk.Entry(
                     block_frames[block_row][block_col],
                     width=2,
@@ -95,8 +130,8 @@ class SudokuUI:
 
         for i in range(3):
             for j in range(3):
-                block = [board[x][y] for x in range(i*3, i*3+3)
-                                       for y in range(j*3, j*3+3)]
+                block = [board[x][y] for x in range(i * 3, i * 3 + 3)
+                                       for y in range(j * 3, j * 3 + 3)]
                 if not is_valid_block(block):
                     return False
 
@@ -113,46 +148,9 @@ class SudokuUI:
         ctx = self.get_sudoku_context()
         set_context(ctx)
 
-    # --------- Solver Logic Below ----------
-
-    def is_valid(self, board, row, col, num):
-        for i in range(9):
-            if board[row][i] == num or board[i][col] == num:
-                return False
-        start_row, start_col = 3 * (row // 3), 3 * (col // 3)
-        for i in range(3):
-            for j in range(3):
-                if board[start_row + i][start_col + j] == num:
-                    return False
-        return True
-
-    def solve_sudoku(self, board):
-        for row in range(9):
-            for col in range(9):
-                if board[row][col] == 0:
-                    for num in range(1, 10):
-                        if self.is_valid(board, row, col, num):
-                            board[row][col] = num
-                            if self.solve_sudoku(board):
-                                return True
-                            board[row][col] = 0
-                    return False
-        return True
-
-    def get_next_correct_move(self):
-        current_board = self.get_board()
-        solved = deepcopy(current_board)
-        if not self.solve_sudoku(solved):
-            return None  # unsolvable
-
-        for i in range(9):
-            for j in range(9):
-                if current_board[i][j] == 0:
-                    return (i, j, solved[i][j])  # row, col, correct value
-        return None
-
     def show_hint(self):
-        hint = self.get_next_correct_move()
+        board = self.get_board()
+        hint = get_next_correct_move_from_board(board)
         if hint:
             i, j, val = hint
             entry = self.entries[i][j]
