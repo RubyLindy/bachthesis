@@ -25,6 +25,20 @@ audio_buffer = []
 USE_DAISYS = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
+SYSTEM_PROMPT_A = (
+                    "You are a robot that assists players with solving sudoku's. "
+                    "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
+                    "Avoid lists, code, or technical formatting. "
+                    "Speak naturally as if talking to a human and always stay on the topic of sudoku's."
+                )
+
+SYSTEM_PROMPT_B = (
+                    "You are a robot that takes on a life coach role towards the person you are speaking to."
+                    "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
+                    "Avoid lists, code, or technical formatting. "
+                    "Speak naturally as if talking to a human and always stay on the topic giving advice about life."
+
+)
 
 def _getOpenAiClient():
     if "OPENAI_API_KEY" not in os.environ:
@@ -72,17 +86,14 @@ def _listen(lenArg):
 
 def _prompt(s1):
     client = _getOpenAiClient()
+    system_prompt = SYSTEM_PROMPT_A if PROMPT == "A" else SYSTEM_PROMPT_B
+
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "You are a robot that assists players with solving sudoku's. "
-                    "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
-                    "Avoid lists, code, or technical formatting. "
-                    "Speak naturally as if talking to a human and always stay on the topic of sudoku's."
-                )
+                "content": system_prompt
             },
             {
                 "role": "user",
@@ -160,8 +171,8 @@ wamp = Component(
 
 wamp.on_join(main)
 
-def choose_voice():
-    global USE_DAISYS
+def choose_settings():
+    global USE_DAISYS, PROMPT
     print("Choose a voice output:")
     print("1. Use Daisys API (natural, cloud-based)")
     print("2. Use default NAO robot voice")
@@ -173,6 +184,15 @@ def choose_voice():
         USE_DAISYS = False
         print(">> Using NAO robot voice.")
 
+    print("\nChoose a task:")
+    print("A. Sudoku")
+    print("B. Life Coach")
+    prompt_choice = input("Enter A or B: ").strip().upper()
+    if prompt_choice == "A":
+        PROMPT = "A"
+    else:
+        PROMPT = "B"
+
 if __name__ == "__main__":
-    choose_voice()
+    choose_settings()
     run([wamp])
