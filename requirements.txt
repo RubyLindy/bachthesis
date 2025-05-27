@@ -11,3 +11,4 @@ daisys
 pydub
 simpleaudio
 python-dotenv
+faster-whisper

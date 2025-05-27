@@ -6,9 +6,11 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 import keyboard
+import time
 from openai import OpenAI
 from libs.starttypes import text, number
 from sudoku_context import get_context
+from faster_whisper import WhisperModel
 
 from daisys import DaisysAPI
 from daisys.v1.speak import SimpleProsody
@@ -20,6 +22,7 @@ sample_rate = 22050
 channels = 1
 dtype = 'int16'
 audio_buffer = []
+WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 
 def _getOpenAiClient():
@@ -50,18 +53,20 @@ def _listen(lenArg):
     print("Recording...")
 
     with sd.InputStream(samplerate=sample_rate, channels=channels, dtype=dtype, callback=callback):
-        while not keyboard.is_pressed('space'):
+        start_time = time.time()
+        while time.time() - start_time < max_rec_time and not keyboard.is_pressed('space'):
             pass
 
     audio_data = np.concatenate(audio_buffer, axis=0)
     sf.write("temp.wav", audio_data, sample_rate, format="wav")
 
-    client = _getOpenAiClient()
-    transcript = client.audio.translations.create(
-        model="whisper-1",
-        file=open("temp.wav", "rb")
-    )
-    return text(transcript.text)
+    segments, info = WHISPER_MODEL.transcribe("temp.wav")
+
+    transcript = ""
+    for segment in segments:
+        transcript += segment.text.strip() + " "
+
+    return text(transcript.strip())
 
 
 def _prompt(s1):
