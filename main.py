@@ -22,6 +22,7 @@ sample_rate = 22050
 channels = 1
 dtype = 'int16'
 audio_buffer = []
+USE_DAISYS = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 
@@ -118,7 +119,6 @@ def speak_with_daisys(text_to_speak):
         print("Falling back to terminal printout.")
         print(">>", text_to_speak)
 
-
 @inlineCallbacks
 def main(session, details):
     print("Press 'q' at any time to quit.")
@@ -136,7 +136,10 @@ def main(session, details):
             print("GPT-4o mini reply:", reply.value)
 
             # Use Daisys API for TTS instead of NAO
-            speak_with_daisys(reply.value)
+            if USE_DAISYS:
+                speak_with_daisys(reply.value)
+            else:
+                yield session.call("rie.dialogue.say_animated", text=reply.value)
 
         except Exception as e:
             print("Error during interaction:", e)
@@ -152,10 +155,24 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.682eede91f2d588ceb27ab09",
+    realm="rie.683599b71f2d588ceb27c921",
 )
 
 wamp.on_join(main)
 
+def choose_voice():
+    global USE_DAISYS
+    print("Choose a voice output:")
+    print("1. Use Daisys API (natural, cloud-based)")
+    print("2. Use default NAO robot voice")
+    choice = input("Enter 1 or 2: ").strip()
+    if choice == "1":
+        USE_DAISYS = True
+        print(">> Using Daisys API for speech.")
+    else:
+        USE_DAISYS = False
+        print(">> Using NAO robot voice.")
+
 if __name__ == "__main__":
+    choose_voice()
     run([wamp])
