@@ -27,11 +27,7 @@ USE_DAISYS = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 # Phases
-PHASE_INTRO = "intro"
-PHASE_TASK = "task"
-PHASE_CONCLUSION = "conclusion"
-current_phase = PHASE_INTRO
-phase_start_time = None
+current_phase = "intro"
 
 # Prompts
 SYSTEM_PROMPT_A = (
@@ -46,9 +42,19 @@ SYSTEM_PROMPT_B = (
                     "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
                     "Avoid lists, code, or technical formatting. "
                     "Speak naturally as if talking to a human and always stay on the topic of giving advice about life."
-
 )
 
+SYSTEM_PROMPT_INTRO = (
+                    "Introduce yourself, (your name is Charlie and you are a robot)."
+                    "Explain the task you were designed to do."
+)
+SYSTEM_PROMPT_TASK = (
+
+)
+SYSTEM_PROMPT_CONC = (
+                    "Explain that due to time constraints this will be the end of your interaction."
+                    "Conclude your interaction, say goodbye and thank the participant."
+)
 
 ## Actual Code
 def _getOpenAiClient():
@@ -98,13 +104,22 @@ def _listen(lenArg):
 def _prompt(s1):
     client = _getOpenAiClient()
     system_prompt = SYSTEM_PROMPT_A if PROMPT == "A" else SYSTEM_PROMPT_B
+    
+    if current_phase == "intro":
+        phase_prompt = SYSTEM_PROMPT_INTRO
+    if current_phase == "task":
+        phase_prompt = SYSTEM_PROMPT_TASK
+    else:
+        phase_prompt = SYSTEM_PROMPT_CONC
+
+    complete_prompt = system_prompt + " " + phase_prompt
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
-                "content": system_prompt
+                "content": complete_prompt
             },
             {
                 "role": "user",
@@ -143,11 +158,17 @@ def speak_with_daisys(text_to_speak):
 
 @inlineCallbacks
 def main(session, details):
+    global current_phase
     yield session.call("rom.actuator.audio.volume", volume=45)
     print("Press 'q' at any time to quit.")
     yield session.call("rom.optional.behavior.play", name="BlocklyStand")
+    starttime = time.time()
 
     while not keyboard.is_pressed('q'):
+        if 500 > (time.time() - starttime) > 60:
+            current_phase = "task"
+        if (time.time() - starttime) > 500:
+            current_phase = "conclusion"
         try:
             yield session.call("rie.vision.face.track")
             user_input = _listen(number(8))
