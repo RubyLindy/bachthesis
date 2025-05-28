@@ -27,19 +27,20 @@ USE_DAISYS = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 # Phases
-current_phase = "intro"
+current_phase = 0
 
 # Prompts
 SYSTEM_PROMPT_A = (
                     "You are a robot that assists players with solving sudoku's. "
-                    "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
+                    "You cannot help with anything else. Always speak in plain English, no more than 50 words per response. "
                     "Avoid lists, code, or technical formatting. "
                     "Speak naturally as if talking to a human and always stay on the topic of sudoku's."
                 )
 
 SYSTEM_PROMPT_B = (
                     "You are a robot that takes on a life coach role towards the person you are speaking to."
-                    "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
+                    "A life coach assists with personal growth, challenges a person is facing, and general life advice."
+                    "You cannot help with anything else. Always speak in plain English, no more than 50 words per response. "
                     "Avoid lists, code, or technical formatting. "
                     "Speak naturally as if talking to a human and always stay on the topic of giving advice about life."
 )
@@ -49,7 +50,7 @@ SYSTEM_PROMPT_INTRO = (
                     "Explain the task you were designed to do."
 )
 SYSTEM_PROMPT_TASK = (
-
+                    "Be curious."
 )
 SYSTEM_PROMPT_CONC = (
                     "Explain that due to time constraints this will be the end of your interaction."
@@ -102,14 +103,16 @@ def _listen(lenArg):
 
 
 def _prompt(s1):
+    global current_phase
+
     client = _getOpenAiClient()
     system_prompt = SYSTEM_PROMPT_A if PROMPT == "A" else SYSTEM_PROMPT_B
     
-    if current_phase == "intro":
+    if current_phase == 0:
         phase_prompt = SYSTEM_PROMPT_INTRO
-    if current_phase == "task":
+    if current_phase == 1:
         phase_prompt = SYSTEM_PROMPT_TASK
-    else:
+    if current_phase == 2:
         phase_prompt = SYSTEM_PROMPT_CONC
 
     complete_prompt = system_prompt + " " + phase_prompt
@@ -162,13 +165,17 @@ def main(session, details):
     yield session.call("rom.actuator.audio.volume", volume=45)
     print("Press 'q' at any time to quit.")
     yield session.call("rom.optional.behavior.play", name="BlocklyStand")
-    starttime = time.time()
+    start_time = time.time()
 
     while not keyboard.is_pressed('q'):
-        if 500 > (time.time() - starttime) > 60:
-            current_phase = "task"
-        if (time.time() - starttime) > 500:
-            current_phase = "conclusion"
+        # Check what phase we are in
+        current_time = time.time()
+        if 500 > (current_time - start_time) > 60:
+            current_phase = 1
+        if (current_time - start_time) > 50000:
+            current_phase = 2
+        
+        # Listen and talk
         try:
             yield session.call("rie.vision.face.track")
             user_input = _listen(number(8))
@@ -183,6 +190,7 @@ def main(session, details):
             # Use Daisys API for TTS instead of NAO
             if USE_DAISYS:
                 speak_with_daisys(reply.value)
+            # Or just use NAO
             else:
                 yield session.call("rie.dialogue.say_animated", text=reply.value)
 
