@@ -17,6 +17,7 @@ from daisys.v1.speak import SimpleProsody
 from pydub import AudioSegment
 from pydub.playback import play
 
+# Set-up
 LLMClient = False
 sample_rate = 22050
 channels = 1
@@ -25,6 +26,14 @@ audio_buffer = []
 USE_DAISYS = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
+# Phases
+PHASE_INTRO = "intro"
+PHASE_TASK = "task"
+PHASE_CONCLUSION = "conclusion"
+current_phase = PHASE_INTRO
+phase_start_time = None
+
+# Prompts
 SYSTEM_PROMPT_A = (
                     "You are a robot that assists players with solving sudoku's. "
                     "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
@@ -36,10 +45,12 @@ SYSTEM_PROMPT_B = (
                     "You are a robot that takes on a life coach role towards the person you are speaking to."
                     "You cannot help with anything else. Always speak in plain English, no more than 100 words per response. "
                     "Avoid lists, code, or technical formatting. "
-                    "Speak naturally as if talking to a human and always stay on the topic giving advice about life."
+                    "Speak naturally as if talking to a human and always stay on the topic of giving advice about life."
 
 )
 
+
+## Actual Code
 def _getOpenAiClient():
     if "OPENAI_API_KEY" not in os.environ:
         raise RuntimeError("Set OPENAI_API_KEY in your environment.")
@@ -132,12 +143,14 @@ def speak_with_daisys(text_to_speak):
 
 @inlineCallbacks
 def main(session, details):
+    yield session.call("rom.actuator.audio.volume", volume=45)
     print("Press 'q' at any time to quit.")
     yield session.call("rom.optional.behavior.play", name="BlocklyStand")
 
     while not keyboard.is_pressed('q'):
         try:
-            user_input = _listen(number(5))
+            yield session.call("rie.vision.face.track")
+            user_input = _listen(number(8))
             print("User said:", user_input.value)
 
             sudoku_context = get_context()
@@ -166,7 +179,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.683599b71f2d588ceb27c921",
+    realm="rie.6836d3981f2d588ceb27cfa6",
 )
 
 wamp.on_join(main)
