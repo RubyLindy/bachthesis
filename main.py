@@ -208,7 +208,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.6836d3981f2d588ceb27cfa6",
+    realm="rie.683dbf379827d41c0733654a",
 )
 
 wamp.on_join(main)
