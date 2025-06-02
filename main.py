@@ -149,7 +149,6 @@ def main(session, details):
 
     while not keyboard.is_pressed('q'):
         try:
-            yield session.call("rie.vision.face.track")
             user_input = _listen(number(8))
             print("User said:", user_input.value)
 
@@ -179,7 +178,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.6836d3981f2d588ceb27cfa6",
+    realm="rie.683dbf379827d41c0733654a",
 )
 
 wamp.on_join(main)
