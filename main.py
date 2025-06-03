@@ -27,11 +27,10 @@ USE_DAISYS = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 # Phases
-PHASE_INTRO = "intro"
-PHASE_TASK = "task"
-PHASE_CONCLUSION = "conclusion"
+PHASE_INTRO = 0
+PHASE_TASK = 1
+PHASE_CONCLUSION = 2
 current_phase = PHASE_INTRO
-phase_start_time = None
 
 # Prompts
 SYSTEM_PROMPT_A = (
@@ -143,12 +142,24 @@ def speak_with_daisys(text_to_speak):
 
 @inlineCallbacks
 def main(session, details):
+    global current_phase
     yield session.call("rom.actuator.audio.volume", volume=45)
     print("Press 'q' at any time to quit.")
     yield session.call("rom.optional.behavior.play", name="BlocklyStand")
 
+    start_time = time.time()
+
     while not keyboard.is_pressed('q'):
         try:
+            current_time = time.time()
+            if (current_time - start_time) > 50:
+                current_phase = 1
+                print("Currently in the task phase")
+            if (current_time - start_time) > 500:
+                current_phase = 2
+                print("Currently in the  conclusion phase")
+            else:
+                print("Currently in the introduction phase")
             user_input = _listen(number(8))
             print("User said:", user_input.value)
 
