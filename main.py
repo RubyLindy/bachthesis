@@ -7,6 +7,7 @@ import sounddevice as sd
 import soundfile as sf
 import keyboard
 import time
+import wave
 from openai import OpenAI
 from libs.starttypes import text, number
 from sudoku_context import get_context
@@ -14,8 +15,7 @@ from faster_whisper import WhisperModel
 
 from daisys import DaisysAPI
 from daisys.v1.speak import SimpleProsody
-from pydub import AudioSegment
-from pydub.playback import play
+from daisys.v1 import speak as lee
 
 # Set-up
 LLMClient = False
@@ -24,6 +24,8 @@ channels = 1
 dtype = 'int16'
 audio_buffer = []
 USE_DAISYS = None
+DAISYS_VOICE = None
+DAISYS_CLIENT = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 # Phases
@@ -58,6 +60,22 @@ def _getOpenAiClient():
         LLMClient = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     return LLMClient
 
+def init_daisys():
+    global DAISYS_CLIENT, DAISYS_VOICE
+
+    email = os.environ["DAISYS_EMAIL"]
+    password = os.environ["DAISYS_PASSWORD"]
+
+    # Get just the 'speak' subclient
+    speak = DaisysAPI("speak", email=email, password=password).get_client()
+
+    voices = speak.get_voices()
+    if not voices:
+        raise RuntimeError("No voices available from Daisys.")
+
+    DAISYS_CLIENT = speak
+    DAISYS_VOICE = voices[0]
+    print(f"Using Daisys voice: {DAISYS_VOICE.name}")
 
 def callback(indata, frames, time, status):
     if status:
@@ -113,32 +131,27 @@ def _prompt(s1):
     )
     return text(value=completion.choices[0].message.content)
 
+@inlineCallbacks
+def speak_with_daisys(session, text_to_speak):
+    global DAISYS_CLIENT, DAISYS_VOICE
 
-def speak_with_daisys(text_to_speak):
     try:
-        email = os.environ["DAISYS_EMAIL"]
-        password = os.environ["DAISYS_PASSWORD"]
+        take = DAISYS_CLIENT.generate_take(
+            voice_id=DAISYS_VOICE.voice_id,
+            text=text_to_speak,
+            prosody=SimpleProsody(pace=0, pitch=0, expression=5)
+        )
 
-        with DaisysAPI('speak', email=email, password=password) as speak:
-            voices = speak.get_voices()
-            if not voices:
-                raise RuntimeError("No voices available in Daisys account.")
+        DAISYS_CLIENT.get_take_audio(take_id=take.take_id, file="daisys_reply.wav", format="wav")
 
-            voice = voices[0]  # Use the first voice found
-            take = speak.generate_take(
-                voice_id=voice.voice_id,
-                text=text_to_speak,
-                prosody=SimpleProsody(pace=0, pitch=0, expression=5)
-            )
-            speak.get_take_audio(take_id=take.take_id, file="daisys_reply.mp3", format="mp3")
+        with wave.open("daisys_reply.wav", "rb") as wav_file:
+            frames = wav_file.readframes(wav_file.getnframes())
+            rate = wav_file.getframerate()
 
-        audio = AudioSegment.from_file("daisys_reply.mp3", format="mp3")
-        play(audio)
+        yield session.call("rom.actuator.audio.play", data="daisys_reply.wav", rate=rate, sync=True)
 
     except Exception as e:
-        print(f"Daisys TTS error: {e}")
-        print("Falling back to terminal printout.")
-        print(">>", text_to_speak)
+        print(f"[Daisys TTS error] {e}")
 
 @inlineCallbacks
 def main(session, details):
@@ -155,7 +168,7 @@ def main(session, details):
             if (current_time - start_time) > 50:
                 current_phase = 1
                 print("Currently in the task phase")
-            if (current_time - start_time) > 500:
+            elif (current_time - start_time) > 500:
                 current_phase = 2
                 print("Currently in the  conclusion phase")
             else:
@@ -171,7 +184,8 @@ def main(session, details):
 
             # Use Daisys API for TTS instead of NAO
             if USE_DAISYS:
-                speak_with_daisys(reply.value)
+                print("Speaking using DAISYS")
+                speak_with_daisys(session, reply.value)
             else:
                 yield session.call("rie.dialogue.say_animated", text=reply.value)
 
@@ -189,7 +203,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.683dbf379827d41c0733654a",
+    realm="rie.684004bb9827d41c07336fb5",
 )
 
 wamp.on_join(main)
@@ -206,6 +220,9 @@ def choose_settings():
     else:
         USE_DAISYS = False
         print(">> Using NAO robot voice.")
+
+    if USE_DAISYS:
+        init_daisys()
 
     print("\nChoose a task:")
     print("A. Sudoku")
