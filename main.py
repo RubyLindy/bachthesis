@@ -160,22 +160,11 @@ def speak_with_daisys(session, text_to_speak):
             text=text_to_speak,
             prosody=SimpleProsody(pace=0, pitch=0, expression=5)
         )
-        DAISYS_CLIENT.get_take_audio(take_id=take.take_id, file="daisys_reply.wav", format="wav")
+        url = DAISYS_CLIENT.get_take_audio_url(take_id=take.take_id, format="wav")
 
-        audio = AudioSegment.from_wav("daisys_reply.wav")
-        stereo_audio = audio.set_channels(2)  # Convert to stereo
-        stereo_audio.export("daisys_reply_stereo.wav", format="wav")
+        print("The url of the audio is: " + str(url))
 
-        # Extract raw PCM data (strip header)
-        with wave.open("daisys_reply_stereo.wav", "rb") as wav_file:
-            assert wav_file.getsampwidth() == 2, "Expected 16-bit audio"
-            assert wav_file.getnchannels() == 2, "Expected stereo audio"
-            assert wav_file.getcomptype() == 'NONE', "Audio must be uncompressed PCM"
-            frames = wav_file.readframes(wav_file.getnframes())
-            rate = wav_file.getframerate()
-
-        print(f"Sending {len(frames)} bytes of stereo PCM at {rate} Hz...")
-        yield session.call("rom.actuator.audio.play", data=frames, rate=rate, sync=True)
+        yield session.call("rom.actuator.audio.stream", url=url,sync=True)
 
     except Exception as e:
         print(f"[Daisys TTS error] {e}")
