@@ -7,15 +7,18 @@ import sounddevice as sd
 import soundfile as sf
 import keyboard
 import time
+import wave
+import struct
+import array
 from openai import OpenAI
 from libs.starttypes import text, number
 from sudoku_context import get_context
 from faster_whisper import WhisperModel
+from pydub import AudioSegment
 
 from daisys import DaisysAPI
 from daisys.v1.speak import SimpleProsody
-from pydub import AudioSegment
-from pydub.playback import play
+from daisys.v1 import speak as lee
 
 # Set-up
 LLMClient = False
@@ -24,39 +27,41 @@ channels = 1
 dtype = 'int16'
 audio_buffer = []
 USE_DAISYS = None
+DAISYS_VOICE = None
+DAISYS_CLIENT = None
 WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
-
-# Phases
 current_phase = 0
 
-# Prompts
+# Task Prompts
 SYSTEM_PROMPT_A = (
-                    "You are a robot that assists players with solving sudoku's. "
+                    "You are a robot that assists players with solving sudoku's for an experiment. "
                     "You cannot help with anything else. Always speak in plain English, no more than 50 words per response. "
                     "Avoid lists, code, or technical formatting. "
                     "Speak naturally as if talking to a human and always stay on the topic of sudoku's."
                 )
 
 SYSTEM_PROMPT_B = (
-                    "You are a robot that takes on a life coach role towards the person you are speaking to."
-                    "A life coach assists with personal growth, challenges a person is facing, and general life advice."
+                    "You are a robot that takes on a life coach role towards the person you are speaking to for an experiment."
                     "You cannot help with anything else. Always speak in plain English, no more than 50 words per response. "
                     "Avoid lists, code, or technical formatting. "
                     "Speak naturally as if talking to a human and always stay on the topic of giving advice about life."
-)
+                )
 
-SYSTEM_PROMPT_INTRO = (
-                    "Introduce yourself, (your name is Charlie and you are a robot)."
+# Phase Prompts
+PHASE_PROMPT_0 = (
+                    "The researcher, Lee, first introduces you to the participant. After that only the participant is speaking to you."
+                    "Introduce yourself, your name is Charlie and you are a robot, designed to do a task."
                     "Explain the task you were designed to do."
-)
-SYSTEM_PROMPT_TASK = (
-                    "Be curious."
-)
-SYSTEM_PROMPT_CONC = (
+                )
+
+PHASE_PROMPT_1 = (
+                    "Be curious"
+                )
+
+PHASE_PROMPT_2 = (
                     "Explain that due to time constraints this will be the end of your interaction."
                     "Conclude your interaction, say goodbye and thank the participant."
-)
-
+                )
 ## Actual Code
 def _getOpenAiClient():
     if "OPENAI_API_KEY" not in os.environ:
@@ -66,6 +71,22 @@ def _getOpenAiClient():
         LLMClient = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     return LLMClient
 
+def init_daisys():
+    global DAISYS_CLIENT, DAISYS_VOICE
+
+    email = os.environ["DAISYS_EMAIL"]
+    password = os.environ["DAISYS_PASSWORD"]
+
+    # Get just the 'speak' subclient
+    speak = DaisysAPI("speak", email=email, password=password).get_client()
+
+    voices = speak.get_voices()
+    if not voices:
+        raise RuntimeError("No voices available from Daisys.")
+
+    DAISYS_CLIENT = speak
+    DAISYS_VOICE = voices[0]
+    print(f"Using Daisys voice: {DAISYS_VOICE.name}")
 
 def callback(indata, frames, time, status):
     if status:
@@ -107,22 +128,21 @@ def _prompt(s1):
 
     client = _getOpenAiClient()
     system_prompt = SYSTEM_PROMPT_A if PROMPT == "A" else SYSTEM_PROMPT_B
-    
     if current_phase == 0:
-        phase_prompt = SYSTEM_PROMPT_INTRO
-    if current_phase == 1:
-        phase_prompt = SYSTEM_PROMPT_TASK
-    if current_phase == 2:
-        phase_prompt = SYSTEM_PROMPT_CONC
+        phase_prompt = PHASE_PROMPT_0
+    elif current_phase == 1:
+        phase_prompt = PHASE_PROMPT_1
+    else:
+        phase_prompt = PHASE_PROMPT_2
 
-    complete_prompt = system_prompt + " " + phase_prompt
+    combined_prompt = str(system_prompt) + "\n" + str(phase_prompt)
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
-                "content": complete_prompt
+                "content": combined_prompt
             },
             {
                 "role": "user",
@@ -132,32 +152,25 @@ def _prompt(s1):
     )
     return text(value=completion.choices[0].message.content)
 
+@inlineCallbacks
+def speak_with_daisys(session, text_to_speak):
+    global DAISYS_CLIENT, DAISYS_VOICE
 
-def speak_with_daisys(text_to_speak):
     try:
-        email = os.environ["DAISYS_EMAIL"]
-        password = os.environ["DAISYS_PASSWORD"]
+        take = DAISYS_CLIENT.generate_take(
+            voice_id=DAISYS_VOICE.voice_id,
+            text=text_to_speak,
+            prosody=SimpleProsody(pace=0, pitch=0, expression=5)
+        )
+        url = DAISYS_CLIENT.get_take_audio_url(take_id=take.take_id, format="wav")
 
-        with DaisysAPI('speak', email=email, password=password) as speak:
-            voices = speak.get_voices()
-            if not voices:
-                raise RuntimeError("No voices available in Daisys account.")
+        print("The url of the audio is: " + str(url))
 
-            voice = voices[0]  # Use the first voice found
-            take = speak.generate_take(
-                voice_id=voice.voice_id,
-                text=text_to_speak,
-                prosody=SimpleProsody(pace=0, pitch=0, expression=5)
-            )
-            speak.get_take_audio(take_id=take.take_id, file="daisys_reply.mp3", format="mp3")
-
-        audio = AudioSegment.from_file("daisys_reply.mp3", format="mp3")
-        play(audio)
+        yield session.call("rom.actuator.audio.stream", url=url,sync=True)
 
     except Exception as e:
-        print(f"Daisys TTS error: {e}")
-        print("Falling back to terminal printout.")
-        print(">>", text_to_speak)
+        print(f"[Daisys TTS error] {e}")
+
 
 @inlineCallbacks
 def main(session, details):
@@ -165,32 +178,38 @@ def main(session, details):
     yield session.call("rom.actuator.audio.volume", volume=45)
     print("Press 'q' at any time to quit.")
     yield session.call("rom.optional.behavior.play", name="BlocklyStand")
+
     start_time = time.time()
 
     while not keyboard.is_pressed('q'):
-        # Check what phase we are in
-        current_time = time.time()
-        if 500 > (current_time - start_time) > 60:
-            current_phase = 1
-        if (current_time - start_time) > 50000:
-            current_phase = 2
-        
-        # Listen and talk
-        try:
-            yield session.call("rie.vision.face.track")
+        try:   
+            # Phases activation
+            current_time = time.time()
+            if (current_time - start_time) > 40:
+                current_phase = 1
+                print("Currently in the task phase, " + str((current_time - start_time)))
+            elif (current_time - start_time) > 500:
+                current_phase = 2
+                print("Currently in the  conclusion phase, " + str((current_time - start_time)))
+            else:
+                print("Currently in the introduction phase, " + str((current_time - start_time)))
+            
+            # Listening
             user_input = _listen(number(8))
             print("User said:", user_input.value)
 
             sudoku_context = get_context()
             combined_prompt = sudoku_context + "\nUser said:\n" + user_input.value
 
+            # Thinking
             reply = _prompt(text(combined_prompt))
             print("GPT-4o mini reply:", reply.value)
 
+            # Talking
             # Use Daisys API for TTS instead of NAO
             if USE_DAISYS:
-                speak_with_daisys(reply.value)
-            # Or just use NAO
+                print("Speaking using DAISYS")
+                speak_with_daisys(session, reply.value)
             else:
                 yield session.call("rie.dialogue.say_animated", text=reply.value)
 
@@ -208,7 +227,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.683dbf379827d41c0733654a",
+    realm="rie.684817e59827d41c07339429",
 )
 
 wamp.on_join(main)
@@ -225,6 +244,9 @@ def choose_settings():
     else:
         USE_DAISYS = False
         print(">> Using NAO robot voice.")
+
+    if USE_DAISYS:
+        init_daisys()
 
     print("\nChoose a task:")
     print("A. Sudoku")
