@@ -164,6 +164,7 @@ class SudokuUI:
 
     def auto_save(self):
         self.save_board_to_file()
+        print("Board saved!")
         self.root.after(3000, self.auto_save)
 
 

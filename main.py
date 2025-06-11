@@ -11,7 +11,7 @@ import subprocess
 import sys
 from openai import OpenAI
 from libs.starttypes import text, number
-from sudoku_context import get_context, get_hint
+from sudoku_context import generate_hint_from_file
 from faster_whisper import WhisperModel
 from pydub import AudioSegment
 
@@ -219,9 +219,10 @@ def main(session, details):
             user_input = _listen(number(8))
             print("User said:", user_input.value)
 
+            hint = generate_hint_from_file("sudoku_board.txt")
+
             if (PROMPT=="A") and ("hint" in user_input.value.lower()):
-                sudoku_context = get_context()
-                combined_prompt = get_hint() + "\nUser said:\n" + user_input.value
+                combined_prompt = hint + "\nUser said:\n" + user_input.value
             else:
                 combined_prompt = user_input.value
 

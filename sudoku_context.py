@@ -17,8 +17,6 @@ def set_hint(hint):
 def get_hint():
     return latest_hint
 
-from copy import deepcopy
-
 def generate_hint_from_file(puzzle_file="puzzle2.txt"):
     def is_valid(board, row, col, num):
         for i in range(9):
@@ -60,6 +58,6 @@ def generate_hint_from_file(puzzle_file="puzzle2.txt"):
     for i in range(9):
         for j in range(9):
             if board[i][j] == 0:
-                return f"The correct next move is to place {solved[i][j]} at row {i+1}, column {j+1}."
+                return f"A correct next move is to place {solved[i][j]} at row {i+1}, column {j+1}."
 
     return "No empty cells found."
