@@ -3,7 +3,6 @@ from tkinter import messagebox
 from sudoku_context import set_context, set_hint
 from copy import deepcopy
 
-
 def get_next_correct_move_from_board(board):
     def is_valid(board, row, col, num):
         for i in range(9):
@@ -44,6 +43,7 @@ class SudokuUI:
     def __init__(self, root, puzzle_file="puzzle2.txt"):
         self.root = root
         self.root.title("Sudoku")
+        self.root.after(3000, self.auto_save)
 
         self.entries = [[None for _ in range(9)] for _ in range(9)]
         self.puzzle = self.load_puzzle(puzzle_file)
@@ -51,9 +51,6 @@ class SudokuUI:
 
         check_button = tk.Button(self.root, text="Check Validity", command=self.check_valid)
         check_button.pack(pady=5)
-
-        hint_button = tk.Button(self.root, text="Get Hint", command=self.show_hint)
-        hint_button.pack(pady=5)
 
     def load_puzzle(self, filename):
         with open(filename, "r") as f:
@@ -149,16 +146,25 @@ class SudokuUI:
         set_context(ctx)
 
     def show_hint(self):
+            board = self.get_board()
+            hint = get_next_correct_move_from_board(board)
+            if hint:
+                i, j, val = hint
+                hint_text = f"The correct next move is to place {val} at row {i+1}, column {j+1}, only provide if the participant asks for a hint."
+                set_hint(hint_text)
+            else:
+                set_hint("No hints available. Puzzle may be complete or unsolvable.")
+                messagebox.showinfo("Hint", "No hints available. Puzzle may be complete or unsolvable.")
+
+    def save_board_to_file(self, path="sudoku_board.txt"):
         board = self.get_board()
-        hint = get_next_correct_move_from_board(board)
-        if hint:
-            i, j, val = hint
-            entry = self.entries[i][j]
-            entry.delete(0, tk.END)
-            entry.insert(0, str(val))
-            entry.config(fg="blue")  # visually distinguish hint
-        else:
-            messagebox.showinfo("Hint", "No hints available. Puzzle may be complete or unsolvable.")
+        with open(path, "w") as f:
+            for row in board:
+                f.write("".join(str(num) for num in row) + "\n")
+
+    def auto_save(self):
+        self.save_board_to_file()
+        self.root.after(3000, self.auto_save)
 
 
 if __name__ == "__main__":

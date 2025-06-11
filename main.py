@@ -1,18 +1,17 @@
 from autobahn.twisted.component import Component, run
 from twisted.internet.defer import inlineCallbacks
 import os
-import io
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 import keyboard
 import time
 import wave
-import struct
-import array
+import subprocess
+import sys
 from openai import OpenAI
 from libs.starttypes import text, number
-from sudoku_context import get_context
+from sudoku_context import get_context, get_hint
 from faster_whisper import WhisperModel
 from pydub import AudioSegment
 
@@ -51,12 +50,20 @@ SYSTEM_PROMPT_B = (
 PHASE_PROMPT_0 = (
                     "The researcher, Lee, first introduces you to the participant. After that only the participant is speaking to you."
                     "Introduce yourself, your name is Charlie and you are a robot, designed to do a task."
+                    "Ask the participants name."
                     "Explain the task you were designed to do."
                 )
 
-PHASE_PROMPT_1 = (
+PHASE_PROMPT_1_A = (
                     "Be curious"
+                    "Explain the rules of sudoku."
+                    "You already know the board."
                 )
+
+PHASE_PROMPT_1_B = (
+                    "Be curious"
+                    "Give tips that people can apply in their daily life."
+)
 
 PHASE_PROMPT_2 = (
                     "Explain that due to time constraints this will be the end of your interaction."
@@ -131,7 +138,10 @@ def _prompt(s1):
     if current_phase == 0:
         phase_prompt = PHASE_PROMPT_0
     elif current_phase == 1:
-        phase_prompt = PHASE_PROMPT_1
+        if PROMPT == "A":
+            phase_prompt = PHASE_PROMPT_1_A
+        else:
+            phase_prompt = PHASE_PROMPT_1_B
     else:
         phase_prompt = PHASE_PROMPT_2
 
@@ -166,10 +176,9 @@ def speak_with_daisys(session, text_to_speak):
         DAISYS_CLIENT.get_take_audio(take_id=take.take_id, file="daisys_reply.wav", format="wav")
 
         audio = AudioSegment.from_wav("daisys_reply.wav")
-        stereo_audio = audio.set_channels(2)  # Convert to stereo
+        stereo_audio = audio.set_channels(2)
         stereo_audio.export("daisys_reply_stereo.wav", format="wav")
 
-        # Extract raw PCM data (strip header)
         with wave.open("daisys_reply_stereo.wav", "rb") as wav_file:
             assert wav_file.getsampwidth() == 2, "Expected 16-bit audio"
             assert wav_file.getnchannels() == 2, "Expected stereo audio"
@@ -210,8 +219,11 @@ def main(session, details):
             user_input = _listen(number(8))
             print("User said:", user_input.value)
 
-            sudoku_context = get_context()
-            combined_prompt = sudoku_context + "\nUser said:\n" + user_input.value
+            if (PROMPT=="A") and ("hint" in user_input.value.lower()):
+                sudoku_context = get_context()
+                combined_prompt = get_hint() + "\nUser said:\n" + user_input.value
+            else:
+                combined_prompt = user_input.value
 
             # Thinking
             reply = _prompt(text(combined_prompt))
@@ -229,6 +241,8 @@ def main(session, details):
             print("Error during interaction:", e)
 
     yield session.call("rom.optional.behavior.play", name="BlocklyCrouch")
+    print("Closing Sudoku interface...")
+    subprocess.Popen.terminate()
     print("Quitting interaction loop...")
     session.leave()
 
@@ -239,7 +253,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.684817e59827d41c07339429",
+    realm="rie.684945439827d41c07339a0e",
 )
 
 wamp.on_join(main)
@@ -266,6 +280,8 @@ def choose_settings():
     prompt_choice = input("Enter A or B: ").strip().upper()
     if prompt_choice == "A":
         PROMPT = "A"
+        print("\nLaunching Sudoku interface...")
+        subprocess.Popen([sys.executable, "sudoku.py"])
     else:
         PROMPT = "B"
 
