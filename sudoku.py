@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import messagebox
-from sudoku_context import set_context, set_hint
 from copy import deepcopy
 
 def get_next_correct_move_from_board(board):
@@ -43,7 +42,7 @@ class SudokuUI:
     def __init__(self, root, puzzle_file="puzzle2.txt"):
         self.root = root
         self.root.title("Sudoku")
-        self.root.after(3000, self.auto_save)
+        self.root.after(6000, self.auto_save)
 
         self.entries = [[None for _ in range(9)] for _ in range(9)]
         self.puzzle = self.load_puzzle(puzzle_file)
@@ -141,21 +140,6 @@ class SudokuUI:
             context += " ".join(str(num) if num != 0 else "_" for num in row) + "\n"
         return context
 
-    def update_context(self):
-        ctx = self.get_sudoku_context()
-        set_context(ctx)
-
-    def show_hint(self):
-            board = self.get_board()
-            hint = get_next_correct_move_from_board(board)
-            if hint:
-                i, j, val = hint
-                hint_text = f"The correct next move is to place {val} at row {i+1}, column {j+1}, only provide if the participant asks for a hint."
-                set_hint(hint_text)
-            else:
-                set_hint("No hints available. Puzzle may be complete or unsolvable.")
-                messagebox.showinfo("Hint", "No hints available. Puzzle may be complete or unsolvable.")
-
     def save_board_to_file(self, path="sudoku_board.txt"):
         board = self.get_board()
         with open(path, "w") as f:
@@ -165,7 +149,7 @@ class SudokuUI:
     def auto_save(self):
         self.save_board_to_file()
         print("Board saved!")
-        self.root.after(3000, self.auto_save)
+        self.root.after(6000, self.auto_save)
 
 
 if __name__ == "__main__":

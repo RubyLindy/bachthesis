@@ -1,23 +1,6 @@
 from copy import deepcopy
 
-latest_context = ""
-latest_hint = ""
-
-def set_context(ctx):
-    global latest_context
-    latest_context = ctx
-
-def get_context():
-    return latest_context
-
-def set_hint(hint):
-    global latest_hint
-    latest_hint = hint
-
-def get_hint():
-    return latest_hint
-
-def generate_hint_from_file(puzzle_file="puzzle2.txt"):
+def generate_hint_from_file(puzzle_file="sudoku_board.txt"):
     def is_valid(board, row, col, num):
         for i in range(9):
             if board[row][i] == num or board[i][col] == num:
@@ -42,14 +25,15 @@ def generate_hint_from_file(puzzle_file="puzzle2.txt"):
                     return False
         return True
 
-    # Load board from file
     with open(puzzle_file, "r") as f:
         lines = f.readlines()
 
     board = []
+    context = ""
     for line in lines:
-        row = [int(c) for c in line.strip() if c.isdigit()]
-        board.append(row)
+        digits = [int(c) for c in line.strip() if c.isdigit()]
+        board.append(digits)
+        context += " ".join(str(c) if c != 0 else "_" for c in digits) + "\n"
 
     solved = deepcopy(board)
     if not solve(solved):
@@ -58,6 +42,6 @@ def generate_hint_from_file(puzzle_file="puzzle2.txt"):
     for i in range(9):
         for j in range(9):
             if board[i][j] == 0:
-                return f"A correct next move is to place {solved[i][j]} at row {i+1}, column {j+1}."
+                return f"A correct next move is to place {solved[i][j]} at row {i+1}, column {j+1}. The board looks like this: {context}"
 
     return "No empty cells found."

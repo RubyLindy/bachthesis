@@ -55,9 +55,9 @@ PHASE_PROMPT_0 = (
                 )
 
 PHASE_PROMPT_1_A = (
-                    "Be curious"
-                    "Explain the rules of sudoku."
-                    "You already know the board."
+                    "Be curious."
+                    "Explain the rules of sudoku if asked."
+                    "You can see the puzzle."
                 )
 
 PHASE_PROMPT_1_B = (
@@ -221,10 +221,10 @@ def main(session, details):
 
             hint = generate_hint_from_file("sudoku_board.txt")
 
-            if (PROMPT=="A") and ("hint" in user_input.value.lower()):
+            if (PROMPT=="A"):
                 combined_prompt = hint + "\nUser said:\n" + user_input.value
             else:
-                combined_prompt = user_input.value
+                combined_prompt = "\nUser said:\n" + user_input.value
 
             # Thinking
             reply = _prompt(text(combined_prompt))
@@ -254,7 +254,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.684945439827d41c07339a0e",
+    realm="rie.684a9bcf9827d41c0733a03e",
 )
 
 wamp.on_join(main)
