@@ -1,5 +1,6 @@
 from autobahn.twisted.component import Component, run
 from twisted.internet.defer import inlineCallbacks
+from twisted.internet.threads import deferToThread
 import os
 import numpy as np
 import sounddevice as sd
@@ -174,28 +175,30 @@ def _prompt(s1):
 def speak_with_daisys(session, text_to_speak):
     global DAISYS_CLIENT, DAISYS_VOICE
 
-    try:
-        take = DAISYS_CLIENT.generate_take(
-            voice_id=DAISYS_VOICE.voice_id,
-            text=text_to_speak,
-            prosody=SimpleProsody(pace=0, pitch=0, expression=5)
-        )
+    take = DAISYS_CLIENT.generate_take(
+        voice_id=DAISYS_VOICE.voice_id,
+        text=text_to_speak,
+        prosody=SimpleProsody(pace=0, pitch=0, expression=5)
+    )
 
-        DAISYS_CLIENT.get_take_audio(take_id=take.take_id, file="daisys_reply.wav", format="wav")
+    DAISYS_CLIENT.get_take_audio(take_id=take.take_id, file="daisys_reply.wav", format="wav")
+    print("saying hello!")
 
-        [rate,data]=read("daisys_reply.wav")
-        raw=toStereo((data*32768).astype(np.int16)).tobytes()
+    [rate,data]=read("daisys_reply.wav")
+    raw=toStereo((data).astype(np.int16)).tobytes()
 
-        yield session.call("rom.actuator.audio.play", data=raw, rate=rate, sync=True)
+    print("saying goodbye?")
 
-    except Exception as e:
-        print(f"[Daisys TTS error] {e}")
+    yield session.call("rom.actuator.audio.play", data=raw, rate=rate, sync=True)
+
 
 
 @inlineCallbacks
 def main(session, details):
     global current_phase
     yield session.call("rom.actuator.audio.volume", volume=45)
+
+    
     print("Press 'q' at any time to quit.")
     yield session.call("rom.optional.behavior.play", name="BlocklyStand")
 
@@ -233,7 +236,8 @@ def main(session, details):
             # Use Daisys API for TTS instead of NAO
             if USE_DAISYS:
                 print("Speaking using DAISYS")
-                speak_with_daisys(session, reply.value)
+                yield speak_with_daisys(session, reply.value)
+                print("Finished DAISYS")
             else:
                 yield session.call("rie.dialogue.say_animated", text=reply.value)
 
@@ -241,8 +245,9 @@ def main(session, details):
             print("Error during interaction:", e)
 
     yield session.call("rom.optional.behavior.play", name="BlocklyCrouch")
-    print("Closing Sudoku interface...")
-    subprocess.Popen.terminate()
+    if PROMPT=="A":
+        print("Closing Sudoku interface...")
+        subprocess.Popen.terminate()
     print("Quitting interaction loop...")
     session.leave()
 
