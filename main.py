@@ -9,11 +9,14 @@ import time
 import wave
 import subprocess
 import sys
+
 from openai import OpenAI
 from libs.starttypes import text, number
 from sudoku_context import generate_hint_from_file
 from faster_whisper import WhisperModel
 from pydub import AudioSegment
+from pydub.playback import play
+from scipy.io.wavfile import write, read
 
 from daisys import DaisysAPI
 from daisys.v1.speak import SimpleProsody
@@ -100,6 +103,11 @@ def callback(indata, frames, time, status):
         print(f"Status: {status}")
     audio_buffer.append(indata.copy())
 
+def toStereo(data):
+    c = np.empty((2*data.size,), dtype=data.dtype)
+    c[0::2] = data
+    c[1::2] = data
+    return c
 
 def _listen(lenArg):
     global audio_buffer
@@ -175,19 +183,10 @@ def speak_with_daisys(session, text_to_speak):
 
         DAISYS_CLIENT.get_take_audio(take_id=take.take_id, file="daisys_reply.wav", format="wav")
 
-        audio = AudioSegment.from_wav("daisys_reply.wav")
-        stereo_audio = audio.set_channels(2)
-        stereo_audio.export("daisys_reply_stereo.wav", format="wav")
+        [rate,data]=read("daisys_reply.wav")
+        raw=toStereo((data*32768).astype(np.int16)).tobytes()
 
-        with wave.open("daisys_reply_stereo.wav", "rb") as wav_file:
-            assert wav_file.getsampwidth() == 2, "Expected 16-bit audio"
-            assert wav_file.getnchannels() == 2, "Expected stereo audio"
-            assert wav_file.getcomptype() == 'NONE', "Audio must be uncompressed PCM"
-            frames = wav_file.readframes(wav_file.getnframes())
-            rate = wav_file.getframerate()
-
-        print(f"Sending {len(frames)} bytes of stereo PCM at {rate} Hz...")
-        yield session.call("rom.actuator.audio.play", data=frames, rate=rate, sync=True)
+        yield session.call("rom.actuator.audio.play", data=raw, rate=rate, sync=True)
 
     except Exception as e:
         print(f"[Daisys TTS error] {e}")
@@ -254,7 +253,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.684a9bcf9827d41c0733a03e",
+    realm="rie.684beb739827d41c0733a666",
 )
 
 wamp.on_join(main)

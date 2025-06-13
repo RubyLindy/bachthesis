@@ -12,3 +12,5 @@ pydub
 simpleaudio
 python-dotenv
 faster-whisper
+scipy
+playsound
