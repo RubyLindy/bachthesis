@@ -1,6 +1,8 @@
 from autobahn.twisted.component import Component, run
+from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.threads import deferToThread
+from twisted.internet.task import deferLater
 import os
 import numpy as np
 import sounddevice as sd
@@ -110,6 +112,9 @@ def toStereo(data):
     c[1::2] = data
     return c
 
+def sleep(seconds):
+    return deferLater(reactor, seconds, lambda: None)
+
 def _listen(lenArg):
     global audio_buffer
     audio_buffer = []
@@ -171,8 +176,7 @@ def _prompt(s1):
     )
     return text(value=completion.choices[0].message.content)
 
-@inlineCallbacks
-def speak_with_daisys(session, text_to_speak):
+def speak_with_daisys(text_to_speak):
     global DAISYS_CLIENT, DAISYS_VOICE
 
     take = DAISYS_CLIENT.generate_take(
@@ -187,9 +191,7 @@ def speak_with_daisys(session, text_to_speak):
     [rate,data]=read("daisys_reply.wav")
     raw=toStereo((data).astype(np.int16)).tobytes()
 
-    print("saying goodbye?")
-
-    yield session.call("rom.actuator.audio.play", data=raw, rate=rate, sync=True)
+    return raw, rate
 
 
 
@@ -205,10 +207,11 @@ def main(session, details):
     start_time = time.time()
 
     while not keyboard.is_pressed('q'):
+        yield sleep(0.1)
         try:   
             # Phases activation
             current_time = time.time()
-            if (current_time - start_time) > 40:
+            if 500 > (current_time - start_time) > 40:
                 current_phase = 1
                 print("Currently in the task phase, " + str((current_time - start_time)))
             elif (current_time - start_time) > 500:
@@ -221,25 +224,29 @@ def main(session, details):
             user_input = _listen(number(8))
             print("User said:", user_input.value)
 
-            hint = generate_hint_from_file("sudoku_board.txt")
+            if PROMPT == "A":
+                hint = generate_hint_from_file("sudoku_board.txt")
 
             if (PROMPT=="A"):
                 combined_prompt = hint + "\nUser said:\n" + user_input.value
             else:
                 combined_prompt = "\nUser said:\n" + user_input.value
+            combined_prompt = text(combined_prompt)
 
             # Thinking
-            reply = _prompt(text(combined_prompt))
+            reply = yield deferToThread(_prompt, combined_prompt)
             print("GPT-4o mini reply:", reply.value)
+
+            yield sleep(0.1)
 
             # Talking
             # Use Daisys API for TTS instead of NAO
             if USE_DAISYS:
                 print("Speaking using DAISYS")
-                yield speak_with_daisys(session, reply.value)
-                print("Finished DAISYS")
+                raw, rate = yield deferToThread(speak_with_daisys, reply.value)
+                yield session.call("rom.actuator.audio.play", data=raw, rate=rate, sync=True)
             else:
-                yield session.call("rie.dialogue.say_animated", text=reply.value)
+                yield session.call("rie.dialogue.say_animated", text=reply.value, lang='en')
 
         except Exception as e:
             print("Error during interaction:", e)
@@ -258,7 +265,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.684beb739827d41c0733a666",
+    realm="rie.6855655b98c949e6910e88c3",
 )
 
 wamp.on_join(main)
