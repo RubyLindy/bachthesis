@@ -63,7 +63,8 @@ PHASE_PROMPT_0 = (
 PHASE_PROMPT_1_A = (
                     "Be curious."
                     "Explain the rules of sudoku if asked."
-                    "You can see the puzzle."
+                    "Only provide a hint if the participant asks for one."
+                    "You know the contents of the sudoku puzzle."
                 )
 
 PHASE_PROMPT_1_B = (
@@ -208,20 +209,20 @@ def main(session, details):
 
     while not keyboard.is_pressed('q'):
         yield sleep(0.1)
-        try:   
+        try:
             # Phases activation
             current_time = time.time()
-            if 500 > (current_time - start_time) > 40:
+            if 300 > (current_time - start_time) > 40:
                 current_phase = 1
                 print("Currently in the task phase, " + str((current_time - start_time)))
-            elif (current_time - start_time) > 500:
+            elif (current_time - start_time) > 300:
                 current_phase = 2
                 print("Currently in the  conclusion phase, " + str((current_time - start_time)))
             else:
                 print("Currently in the introduction phase, " + str((current_time - start_time)))
             
             # Listening
-            user_input = _listen(number(8))
+            user_input = _listen(number(30))
             print("User said:", user_input.value)
 
             if PROMPT == "A":
@@ -265,7 +266,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.6855655b98c949e6910e88c3",
+    realm="rie.685906d798c949e6910e9967",
 )
 
 wamp.on_join(main)
