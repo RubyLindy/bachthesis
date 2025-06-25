@@ -31,6 +31,7 @@ sample_rate = 22050
 channels = 1
 dtype = 'int16'
 audio_buffer = []
+conversation_history = []
 USE_DAISYS = None
 DAISYS_VOICE = None
 DAISYS_CLIENT = None
@@ -63,8 +64,8 @@ PHASE_PROMPT_0 = (
 PHASE_PROMPT_1_A = (
                     "Be curious."
                     "Explain the rules of sudoku if asked."
-                    "Only provide a hint if the participant asks for one."
-                    "You know the contents of the sudoku puzzle."
+                    "Provide a correct move if the participant asks for one."
+                    "You know the current state of the sudoku puzzle."
                 )
 
 PHASE_PROMPT_1_B = (
@@ -74,7 +75,7 @@ PHASE_PROMPT_1_B = (
 
 PHASE_PROMPT_2 = (
                     "Explain that due to time constraints this will be the end of your interaction."
-                    "Conclude your interaction, say goodbye and thank the participant."
+                    "Conclude your interaction, say goodbye and thank the participant for their time."
                 )
 ## Actual Code
 def _getOpenAiClient():
@@ -145,37 +146,38 @@ def _listen(lenArg):
     return text(transcript.strip())
 
 
-def _prompt(s1):
-    global current_phase
+def _prompt(s1, hint):
+    global current_phase, conversation_history
+
+    current_phase = 2
 
     client = _getOpenAiClient()
     system_prompt = SYSTEM_PROMPT_A if PROMPT == "A" else SYSTEM_PROMPT_B
     if current_phase == 0:
         phase_prompt = PHASE_PROMPT_0
     elif current_phase == 1:
-        if PROMPT == "A":
-            phase_prompt = PHASE_PROMPT_1_A
-        else:
-            phase_prompt = PHASE_PROMPT_1_B
+        phase_prompt = PHASE_PROMPT_1_A if PROMPT == "A" else PHASE_PROMPT_1_B
     else:
         phase_prompt = PHASE_PROMPT_2
 
-    combined_prompt = str(system_prompt) + "\n" + str(phase_prompt)
+    combined_prompt = f"{system_prompt}\n{phase_prompt}\n{hint}"
+
+    print(combined_prompt)
+
+    if not conversation_history:
+        conversation_history.append({"role": "system", "content": combined_prompt})
+
+    conversation_history.append({"role": "user", "content": s1.value})
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": combined_prompt
-            },
-            {
-                "role": "user",
-                "content": s1.value
-            }
-        ]
+        messages=conversation_history
     )
-    return text(value=completion.choices[0].message.content)
+
+    reply = completion.choices[0].message.content
+    conversation_history.append({"role": "assistant", "content": reply})
+
+    return text(value=reply)
 
 def speak_with_daisys(text_to_speak):
     global DAISYS_CLIENT, DAISYS_VOICE
@@ -199,7 +201,7 @@ def speak_with_daisys(text_to_speak):
 @inlineCallbacks
 def main(session, details):
     global current_phase
-    yield session.call("rom.actuator.audio.volume", volume=45)
+    yield session.call("rom.actuator.audio.volume", volume=55)
 
     
     print("Press 'q' at any time to quit.")
@@ -212,7 +214,7 @@ def main(session, details):
         try:
             # Phases activation
             current_time = time.time()
-            if 300 > (current_time - start_time) > 40:
+            if 300 > (current_time - start_time) > 30:
                 current_phase = 1
                 print("Currently in the task phase, " + str((current_time - start_time)))
             elif (current_time - start_time) > 300:
@@ -222,20 +224,19 @@ def main(session, details):
                 print("Currently in the introduction phase, " + str((current_time - start_time)))
             
             # Listening
-            user_input = _listen(number(30))
+            user_input = yield deferToThread(_listen, number(30))
             print("User said:", user_input.value)
 
             if PROMPT == "A":
-                hint = generate_hint_from_file("sudoku_board.txt")
-
-            if (PROMPT=="A"):
-                combined_prompt = hint + "\nUser said:\n" + user_input.value
+                hint = yield deferToThread(generate_hint_from_file, "sudoku_board.txt")
             else:
-                combined_prompt = "\nUser said:\n" + user_input.value
-            combined_prompt = text(combined_prompt)
+                hint = " "
+
+            response = text("\nUser said: " + user_input.value)
+            
 
             # Thinking
-            reply = yield deferToThread(_prompt, combined_prompt)
+            reply = yield deferToThread(_prompt, response, hint)
             print("GPT-4o mini reply:", reply.value)
 
             yield sleep(0.1)
@@ -266,7 +267,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.685906d798c949e6910e9967",
+    realm="rie.685ba65b98c949e6910ea61b",
 )
 
 wamp.on_join(main)

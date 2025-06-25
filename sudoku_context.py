@@ -42,6 +42,6 @@ def generate_hint_from_file(puzzle_file="sudoku_board.txt"):
     for i in range(9):
         for j in range(9):
             if board[i][j] == 0:
-                return f"A correct next move is to place {solved[i][j]} at row {i+1}, column {j+1}. The board looks like this: {context}"
+                return "You correct next move is to place" + str(solved[i][j]) + " row " + str(i+1) + ", column " + str(j+1) + " other moves are allowed too, but you can't guarantee those are correct. The board looks like this: " + str(context)
 
     return "No empty cells found."
