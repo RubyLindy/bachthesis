@@ -74,8 +74,9 @@ PHASE_PROMPT_1_B = (
 )
 
 PHASE_PROMPT_2 = (
-                    "Explain that due to time constraints this will be the end of your interaction."
+                    "Regardless of your task, explain that due to time constraints this will be the end of your interaction."
                     "Conclude your interaction, say goodbye and thank the participant for their time."
+                    "YOU MUST IMMEDIATELY END THE CONVERSATION."
                 )
 ## Actual Code
 def _getOpenAiClient():
@@ -149,14 +150,15 @@ def _listen(lenArg):
 def _prompt(s1, hint):
     global current_phase, conversation_history
 
-    current_phase = 2
-
     client = _getOpenAiClient()
     system_prompt = SYSTEM_PROMPT_A if PROMPT == "A" else SYSTEM_PROMPT_B
     if current_phase == 0:
         phase_prompt = PHASE_PROMPT_0
     elif current_phase == 1:
-        phase_prompt = PHASE_PROMPT_1_A if PROMPT == "A" else PHASE_PROMPT_1_B
+        if PROMPT == "A":
+            phase_prompt = PHASE_PROMPT_1_A
+        else:
+            phase_prompt = PHASE_PROMPT_1_B
     else:
         phase_prompt = PHASE_PROMPT_2
 
@@ -164,18 +166,37 @@ def _prompt(s1, hint):
 
     print(combined_prompt)
 
-    if not conversation_history:
-        conversation_history.append({"role": "system", "content": combined_prompt})
+    if current_phase == 2:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    system_prompt + "\n\n"
+                    "!!! IMPORTANT: This is the final phase. You must CONCLUDE the session now. "
+                    "Thank the participant and say goodbye. Do NOT continue the conversation.\n\n"
+                    + phase_prompt + "\n" + str(hint)
+                )
+            },
+            {"role": "user", "content": "Please conclude the session now."}
+            ]
+    else:
+        # Phases 0 and 1 — maintain and grow conversation history
+        messages = [{"role": "system", "content": combined_prompt}]
+        messages.extend(conversation_history)  # only user/assistant pairs
+        messages.append({"role": "user", "content": s1.value})
+
+    print(messages)
 
     conversation_history.append({"role": "user", "content": s1.value})
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=conversation_history
+        messages=messages
     )
 
     reply = completion.choices[0].message.content
-    conversation_history.append({"role": "assistant", "content": reply})
+    if current_phase != 2:
+        conversation_history.append({"role": "assistant", "content": reply})
 
     return text(value=reply)
 
@@ -201,7 +222,7 @@ def speak_with_daisys(text_to_speak):
 @inlineCallbacks
 def main(session, details):
     global current_phase
-    yield session.call("rom.actuator.audio.volume", volume=55)
+    yield session.call("rom.actuator.audio.volume", volume=45)
 
     
     print("Press 'q' at any time to quit.")
@@ -267,7 +288,7 @@ wamp = Component(
         "serializers": ["msgpack"],
         "max_retries": 0
     }],
-    realm="rie.685ba65b98c949e6910ea61b",
+    realm="rie.685cdb0798c949e6910eac04",
 )
 
 wamp.on_join(main)
